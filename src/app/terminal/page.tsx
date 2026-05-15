@@ -2,6 +2,7 @@ import { ArrowRightLeft, Crown, Sparkles, TrendingUp, Wallet } from "lucide-reac
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { jsonSafe } from "@/lib/serialize";
+import { fetchLiveMarkets, fetchEthPriceHistory } from "@/lib/coingecko";
 import { PageHeader } from "@/components/terminal/page-header";
 import { StatCard } from "@/components/terminal/stat-card";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -16,10 +17,13 @@ import { cn } from "@/lib/utils";
 import type { Chain } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 async function loadDashboard() {
-  const [tokens, txs, sigs, ticks, whaleAggregate] = await Promise.all([
-    db.token.findMany({ orderBy: { marketCap: "desc" }, take: 10 }),
+  // Try live data first
+  const [liveMarkets, liveEthChart, txs, sigs, whaleAggregate] = await Promise.all([
+    fetchLiveMarkets(),
+    fetchEthPriceHistory(),
     db.transaction.findMany({
       orderBy: { timestamp: "desc" },
       take: 12,
@@ -30,20 +34,59 @@ async function loadDashboard() {
       take: 5,
       include: { wallet: { select: { displayName: true, ens: true, address: true } } },
     }),
-    db.marketTick.findMany({ where: { symbol: "ETH" }, orderBy: { capturedAt: "asc" } }),
     db.wallet.aggregate({ _sum: { netWorthUsd: true }, _count: true }),
   ]);
 
+  // Use live CoinGecko data if available, else fallback to DB
+  let tokens;
+  if (liveMarkets && liveMarkets.length > 0) {
+    tokens = liveMarkets.slice(0, 10).map((c) => ({
+      id: c.id,
+      symbol: c.symbol.toUpperCase(),
+      name: c.name,
+      priceUsd: c.current_price,
+      change24h: c.price_change_percentage_24h ?? 0,
+      volume24h: c.total_volume,
+      marketCap: c.market_cap,
+      logo: c.image,
+      chain: "ETHEREUM" as Chain,
+      sparkline: c.sparkline_in_7d?.price?.slice(-24) ?? [],
+    }));
+  } else {
+    const dbTokens = await db.token.findMany({ orderBy: { marketCap: "desc" }, take: 10 });
+    tokens = dbTokens.map((t) => ({
+      id: t.id,
+      symbol: t.symbol,
+      name: t.name,
+      priceUsd: Number(t.priceUsd),
+      change24h: t.change24h,
+      volume24h: Number(t.volume24h),
+      marketCap: Number(t.marketCap),
+      logo: t.logo,
+      chain: t.chain,
+      sparkline: [] as number[],
+    }));
+  }
+
+  // Use live ETH chart if available
+  let seriesEth;
+  if (liveEthChart && liveEthChart.length > 0) {
+    seriesEth = liveEthChart;
+  } else {
+    const ticks = await db.marketTick.findMany({ where: { symbol: "ETH" }, orderBy: { capturedAt: "asc" } });
+    seriesEth = ticks.map((t) => ({
+      label: new Date(t.capturedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+      value: Number(t.priceUsd),
+    }));
+  }
+
   const totalNetWorth = Number(whaleAggregate._sum.netWorthUsd ?? 0);
-  const seriesEth = ticks.map((t) => ({
-    label: new Date(t.capturedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-    value: Number(t.priceUsd),
-  }));
 
   return jsonSafe({
     tokens, txs, sigs, seriesEth,
     totalNetWorth,
     walletCount: whaleAggregate._count,
+    isLive: !!liveMarkets,
   });
 }
 
@@ -59,7 +102,7 @@ export default async function TerminalDashboard() {
         title="Overview"
         description="Real-time intelligence on the wallets, tokens, and contracts that move the market."
       >
-        <Badge variant="autumn" className="gap-1.5"><Sparkles className="h-3 w-3" />Autumn ‘26</Badge>
+        <Badge variant="autumn" className="gap-1.5"><Sparkles className="h-3 w-3" />Live · Real-time</Badge>
       </PageHeader>
 
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
@@ -179,9 +222,11 @@ export default async function TerminalDashboard() {
             </div>
             <div className="space-y-1">
               {data.tokens.map((t) => {
-                const series = Array.from({ length: 24 }).map((_, i) => ({
-                  value: Number(t.priceUsd) * (1 + Math.sin(i / 3 + t.symbol.length) * 0.04 + (t.change24h / 100) * (i / 24)),
-                }));
+                const series = t.sparkline && t.sparkline.length > 0
+                  ? t.sparkline.map((v: number) => ({ value: v }))
+                  : Array.from({ length: 24 }).map((_, i) => ({
+                      value: Number(t.priceUsd) * (1 + Math.sin(i / 3 + t.symbol.length) * 0.04 + (t.change24h / 100) * (i / 24)),
+                    }));
                 return (
                   <div
                     key={t.id}

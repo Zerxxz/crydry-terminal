@@ -1,27 +1,9 @@
 import { Sidebar } from "@/components/terminal/sidebar";
 import { Topbar } from "@/components/terminal/topbar";
 import { Aurora } from "@/components/aurora";
-import { AestheticBar } from "@/components/terminal/aesthetic-bar";
-import { db } from "@/lib/db";
+import { AestheticBarWrapper } from "@/components/terminal/aesthetic-bar-wrapper";
 
-async function fetchTicks() {
-  try {
-    const tokens = await db.token.findMany({
-      orderBy: { marketCap: "desc" },
-      take: 16,
-    });
-    return tokens.map((t) => ({
-      symbol: t.symbol,
-      price: Number(t.priceUsd),
-      change: t.change24h,
-    }));
-  } catch {
-    return [];
-  }
-}
-
-export default async function TerminalLayout({ children }: { children: React.ReactNode }) {
-  const ticks = await fetchTicks();
+export default function TerminalLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex min-h-screen">
       <Aurora />
@@ -31,7 +13,7 @@ export default async function TerminalLayout({ children }: { children: React.Rea
         <main className="relative flex-1 overflow-x-hidden p-4 lg:p-6">
           {children}
         </main>
-        <AestheticBar ticks={ticks} />
+        <AestheticBarWrapper />
       </div>
     </div>
   );

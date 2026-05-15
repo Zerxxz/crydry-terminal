@@ -1,14 +1,23 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@/lib/db";
-import { revokeRequestSchema } from "@/lib/types";
 import { jsonSafe } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
+const revokeSchema = z.object({
+  approvalId: z.string().min(1).optional(),
+  // For real on-chain revokes, client sends token + spender + txHash
+  tokenAddress: z.string().optional(),
+  spenderAddress: z.string().optional(),
+  txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
+  walletAddress: z.string().optional(),
+});
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const parsed = revokeRequestSchema.safeParse(body);
+    const parsed = revokeSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { error: parsed.error.issues.map((i) => i.message).join(", ") },
@@ -16,45 +25,64 @@ export async function POST(req: Request) {
       );
     }
 
-    const { approvalId, txHash } = parsed.data;
-    const approval = await db.tokenApproval.findUnique({ where: { id: approvalId } });
-    if (!approval) {
-      return NextResponse.json({ error: "Approval not found" }, { status: 404 });
-    }
-    if (approval.revokedAt) {
-      return NextResponse.json({ error: "Approval already revoked" }, { status: 409 });
-    }
+    const { approvalId, tokenAddress, spenderAddress, txHash, walletAddress } = parsed.data;
 
-    const updated = await db.tokenApproval.update({
-      where: { id: approvalId },
-      data: {
-        revokedAt: new Date(),
-        allowance: "0",
-        isUnlimited: false,
-      },
-    });
+    // Case 1: Real on-chain revoke (client already submitted tx, just recording it)
+    if (txHash && tokenAddress && spenderAddress) {
+      // Try to find and update matching DB record if exists
+      if (walletAddress) {
+        const wallet = await db.wallet.findFirst({
+          where: { address: walletAddress.toLowerCase() },
+        });
 
-    // Log revoke as a transaction record so it appears in activity feeds.
-    if (txHash) {
-      await db.transaction.create({
-        data: {
-          hash: txHash,
-          walletId: approval.walletId,
-          chain: "ETHEREUM",
-          type: "REVOKE",
-          blockNumber: BigInt(0),
-          timestamp: new Date(),
-          fromAddr: "",
-          toAddr: approval.spender,
-          tokenSymbol: "ALLOWANCE",
-          tokenAmount: 0,
-          valueUsd: 0,
-          notes: `Revoked allowance for ${approval.spender}`,
-        },
+        if (wallet) {
+          // Update any matching approval in DB
+          await db.tokenApproval.updateMany({
+            where: {
+              walletId: wallet.id,
+              spender: spenderAddress.toLowerCase(),
+              revokedAt: null,
+            },
+            data: {
+              revokedAt: new Date(),
+              allowance: "0",
+              isUnlimited: false,
+            },
+          });
+        }
+      }
+
+      return NextResponse.json({
+        ok: true,
+        source: "on-chain",
+        txHash,
+        message: `Approval revoked on-chain. Tx: ${txHash}`,
       });
     }
 
-    return NextResponse.json({ ok: true, approval: jsonSafe(updated) });
+    // Case 2: DB-only revoke (for seeded/demo data)
+    if (approvalId) {
+      const approval = await db.tokenApproval.findUnique({ where: { id: approvalId } });
+      if (!approval) {
+        return NextResponse.json({ error: "Approval not found" }, { status: 404 });
+      }
+      if (approval.revokedAt) {
+        return NextResponse.json({ error: "Approval already revoked" }, { status: 409 });
+      }
+
+      const updated = await db.tokenApproval.update({
+        where: { id: approvalId },
+        data: {
+          revokedAt: new Date(),
+          allowance: "0",
+          isUnlimited: false,
+        },
+      });
+
+      return NextResponse.json({ ok: true, source: "database", approval: jsonSafe(updated) });
+    }
+
+    return NextResponse.json({ error: "Provide either approvalId or txHash + tokenAddress + spenderAddress" }, { status: 400 });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to revoke" },
