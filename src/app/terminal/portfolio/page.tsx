@@ -93,7 +93,7 @@ export default async function PortfolioPage({
 
       <div className="flex flex-wrap items-center gap-2">
         <ChainBadge chain={wallet.chain as Chain} />
-        {wallet.labels.map((l: string) => (
+        {wallet.labels.map((l) => (
           <Badge key={l} variant="autumn">{l.replace("_", " ")}</Badge>
         ))}
         <Button size="sm" variant="ghost" className="ml-auto gap-2" asChild>

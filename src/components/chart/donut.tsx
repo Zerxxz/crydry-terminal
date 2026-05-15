@@ -46,11 +46,11 @@ export function Donut({
             borderRadius: 10,
             fontSize: 12,
           }}
-          formatter={(v: number, _: string, p) => {
+          formatter={(v: number, _name: string, entry: { payload: { name: string } }) => {
             const total = data.reduce((a, b) => a + b.value, 0);
             return [
               `${formatUsd(v, { compact: true })} · ${formatPct((v / total) * 100)}`,
-              p.payload.name,
+              entry.payload.name,
             ];
           }}
         />

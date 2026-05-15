@@ -132,7 +132,7 @@ export default async function WhalesPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {w.labels.slice(0, 2).map((l: string) => (
+                      {w.labels.slice(0, 2).map((l) => (
                         <Badge key={l} variant="autumn" className="text-[9px]">{l.replace("_", " ")}</Badge>
                       ))}
                       <ChainBadge chain={w.chain as Chain} />

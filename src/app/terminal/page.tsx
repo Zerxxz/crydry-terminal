@@ -1,4 +1,4 @@
-import { Activity, ArrowRightLeft, Crown, Sparkles, TrendingUp, Wallet } from "lucide-react";
+import { ArrowRightLeft, Crown, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { jsonSafe } from "@/lib/serialize";

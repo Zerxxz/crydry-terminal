@@ -191,7 +191,6 @@ async function main() {
       })
     )
   );
-  const tokenBySymbol = new Map(tokenRecords.map((t) => [t.symbol, t]));
 
   console.log("→ Seeding market ticks (history per symbol)");
   const now = Date.now();

@@ -2,12 +2,21 @@
  * Prisma returns Decimal/BigInt values that don't serialize to JSON natively.
  * This walks an object and coerces those types to numbers/strings the client can use.
  */
-import { Prisma } from "@prisma/client";
+
+function isDecimal(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "toFixed" in value &&
+    "toNumber" in value &&
+    typeof (value as { toNumber: unknown }).toNumber === "function"
+  );
+}
 
 export function jsonSafe<T>(value: T): T {
   if (value === null || value === undefined) return value;
   if (typeof value === "bigint") return value.toString() as unknown as T;
-  if (value instanceof Prisma.Decimal) return Number(value.toString()) as unknown as T;
+  if (isDecimal(value)) return Number((value as { toString: () => string }).toString()) as unknown as T;
   if (value instanceof Date) return value.toISOString() as unknown as T;
   if (Array.isArray(value)) return value.map(jsonSafe) as unknown as T;
   if (typeof value === "object") {

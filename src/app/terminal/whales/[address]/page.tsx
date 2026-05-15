@@ -83,7 +83,7 @@ export default async function WhaleProfilePage({
 
       <div className="flex flex-wrap items-center gap-2">
         <ChainBadge chain={w.chain as Chain} />
-        {w.labels.map((l: string) => (
+        {w.labels.map((l) => (
           <Badge key={l} variant="autumn">{l.replace("_", " ")}</Badge>
         ))}
         {w.bio && <span className="text-sm text-muted-foreground">— {w.bio}</span>}
