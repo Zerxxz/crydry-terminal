@@ -1,0 +1,234 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Chain {
+  ETHEREUM
+  ARBITRUM
+  OPTIMISM
+  BASE
+  POLYGON
+  BSC
+  SOLANA
+  AVALANCHE
+}
+
+enum WalletLabel {
+  WHALE
+  SMART_MONEY
+  EXCHANGE
+  FOUNDATION
+  MARKET_MAKER
+  PROTOCOL
+  HACKER
+  RETAIL
+}
+
+enum TxType {
+  SWAP
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADD_LIQUIDITY
+  REMOVE_LIQUIDITY
+  STAKE
+  UNSTAKE
+  CLAIM
+  MINT
+  BURN
+  APPROVE
+  REVOKE
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AuditSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Wallet {
+  id            String          @id @default(cuid())
+  address       String          @unique
+  chain         Chain           @default(ETHEREUM)
+  ens           String?
+  displayName   String?
+  labels        WalletLabel[]
+  netWorthUsd   Decimal         @db.Decimal(20, 2) @default(0)
+  pnl30dUsd     Decimal         @db.Decimal(20, 2) @default(0)
+  pnl30dPct     Float           @default(0)
+  winRate       Float           @default(0)
+  realizedUsd   Decimal         @db.Decimal(20, 2) @default(0)
+  unrealizedUsd Decimal         @db.Decimal(20, 2) @default(0)
+  followers     Int             @default(0)
+  bio           String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  holdings      Holding[]
+  transactions  Transaction[]
+  approvals     TokenApproval[]
+  signals       SmartMoneySignal[]
+
+  @@index([chain])
+  @@index([netWorthUsd])
+}
+
+model Token {
+  id           String   @id @default(cuid())
+  symbol       String
+  name         String
+  chain        Chain
+  contract     String
+  decimals     Int      @default(18)
+  logo         String?
+  priceUsd     Decimal  @db.Decimal(20, 8) @default(0)
+  change24h    Float    @default(0)
+  volume24h    Decimal  @db.Decimal(20, 2) @default(0)
+  marketCap    Decimal  @db.Decimal(20, 2) @default(0)
+  fdvUsd       Decimal? @db.Decimal(20, 2)
+  category     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  holdings     Holding[]
+  approvals    TokenApproval[]
+
+  @@unique([chain, contract])
+  @@index([symbol])
+}
+
+model Holding {
+  id          String  @id @default(cuid())
+  walletId    String
+  tokenId     String
+  amount      Decimal @db.Decimal(36, 18)
+  valueUsd    Decimal @db.Decimal(20, 2)
+  costBasis   Decimal @db.Decimal(20, 2) @default(0)
+  pnlUsd      Decimal @db.Decimal(20, 2) @default(0)
+  pnlPct      Float   @default(0)
+  allocation  Float   @default(0)
+  updatedAt   DateTime @updatedAt
+
+  wallet      Wallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  token       Token   @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@unique([walletId, tokenId])
+  @@index([walletId])
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  hash        String   @unique
+  walletId    String
+  chain       Chain
+  type        TxType
+  blockNumber BigInt
+  timestamp   DateTime
+  fromAddr    String
+  toAddr      String
+  tokenSymbol String
+  tokenAmount Decimal  @db.Decimal(36, 18)
+  valueUsd    Decimal  @db.Decimal(20, 2)
+  gasUsd      Decimal  @db.Decimal(20, 4) @default(0)
+  protocol    String?
+  notes       String?
+
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, timestamp])
+  @@index([timestamp])
+}
+
+model TokenApproval {
+  id            String    @id @default(cuid())
+  walletId      String
+  tokenId       String
+  spender       String
+  spenderName   String?
+  allowance     String
+  isUnlimited   Boolean   @default(false)
+  riskLevel     RiskLevel @default(LOW)
+  riskReason    String?
+  lastUsed      DateTime?
+  approvedAt    DateTime  @default(now())
+  revokedAt     DateTime?
+
+  wallet        Wallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  token         Token     @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([riskLevel])
+}
+
+model SmartMoneySignal {
+  id          String   @id @default(cuid())
+  walletId    String
+  cohort      String
+  conviction  Float
+  asset       String
+  direction   String
+  sizeUsd     Decimal  @db.Decimal(20, 2)
+  thesis      String?
+  detectedAt  DateTime @default(now())
+
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([cohort])
+  @@index([detectedAt])
+}
+
+model MarketTick {
+  id         String   @id @default(cuid())
+  symbol     String
+  priceUsd   Decimal  @db.Decimal(20, 8)
+  change24h  Float
+  volume24h  Decimal  @db.Decimal(20, 2)
+  capturedAt DateTime @default(now())
+
+  @@index([symbol, capturedAt])
+}
+
+model AuditReport {
+  id              String           @id @default(cuid())
+  contractName    String
+  chain           Chain
+  address         String
+  bytecodeSize    Int
+  verified        Boolean
+  compiler        String?
+  riskScore       Int
+  overallRisk     RiskLevel
+  findings        AuditFinding[]
+  summary         String
+  createdAt       DateTime         @default(now())
+
+  @@index([chain, address])
+}
+
+model AuditFinding {
+  id          String         @id @default(cuid())
+  reportId    String
+  rule        String
+  title       String
+  severity    AuditSeverity
+  description String
+  recommendation String
+  line        Int?
+
+  report      AuditReport    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
