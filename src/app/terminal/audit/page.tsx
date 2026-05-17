@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ScanSearch, ShieldAlert, ShieldCheck, FileSearch } from "lucide-react";
+import type { AuditReport, AuditFinding, Chain, RiskLevel } from "@prisma/client";
 import { db } from "@/lib/db";
 import { jsonSafe } from "@/lib/serialize";
 import { CHAINS } from "@/lib/chains";
@@ -9,19 +10,22 @@ import { StatCard } from "@/components/terminal/stat-card";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AuditForm } from "@/components/terminal/audit-form";
-import type { Chain, RiskLevel } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-async function loadRecentReports() {
-  const reports = await db.auditReport
-    .findMany({
+type ReportWithFindings = AuditReport & { findings: AuditFinding[] };
+
+async function loadRecentReports(): Promise<ReportWithFindings[]> {
+  try {
+    const reports = await db.auditReport.findMany({
       orderBy: { createdAt: "desc" },
       take: 12,
       include: { findings: true },
-    })
-    .catch(() => [] as Awaited<ReturnType<typeof db.auditReport.findMany>>);
-  return jsonSafe(reports);
+    });
+    return jsonSafe(reports) as ReportWithFindings[];
+  } catch {
+    return [];
+  }
 }
 
 const RISK_BADGE: Record<RiskLevel, "success" | "warning" | "destructive"> = {

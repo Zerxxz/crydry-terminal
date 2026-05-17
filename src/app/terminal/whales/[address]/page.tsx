@@ -121,16 +121,18 @@ async function loadWhale(address: string): Promise<{
   }
 
   // Fallback to DB
-  const dbWallet = await db.wallet.findFirst({
-    where: { OR: [{ address: address.toLowerCase() }, { ens: address }] },
-    include: {
-      transactions: { orderBy: { timestamp: "desc" }, take: 30 },
-    },
-  });
+  const dbWallet = await db.wallet
+    .findFirst({
+      where: { OR: [{ address: address.toLowerCase() }, { ens: address }] },
+      include: {
+        transactions: { orderBy: { timestamp: "desc" }, take: 30 },
+      },
+    })
+    .catch(() => null);
 
   if (!dbWallet) return null;
 
-  const safe = jsonSafe(dbWallet);
+  const safe = jsonSafe(dbWallet) as typeof dbWallet;
 
   return {
     wallet: {
@@ -138,7 +140,7 @@ async function loadWhale(address: string): Promise<{
       displayName: safe.displayName,
       ens: safe.ens,
       bio: safe.bio,
-      chain: safe.chain,
+      chain: safe.chain as Chain,
       labels: safe.labels,
       netWorthUsd: Number(safe.netWorthUsd),
       balanceEth: null,
@@ -147,16 +149,16 @@ async function loadWhale(address: string): Promise<{
       winRate: safe.winRate,
       followers: safe.followers,
     },
-    transactions: safe.transactions.map((t: { hash: string; type: string; fromAddr: string; toAddr: string; tokenAmount: number; valueUsd: number; timestamp: string; chain: Chain }) => ({
+    transactions: safe.transactions.map((t) => ({
       hash: t.hash,
-      type: t.type === "TRANSFER_OUT" ? "TRANSFER_OUT" : "TRANSFER_IN",
+      type: (t.type === "TRANSFER_OUT" ? "TRANSFER_OUT" : "TRANSFER_IN") as "TRANSFER_IN" | "TRANSFER_OUT",
       fromAddr: t.fromAddr,
       toAddr: t.toAddr,
       valueEth: Number(t.tokenAmount),
       valueUsd: Number(t.valueUsd),
-      timestamp: new Date(t.timestamp).getTime(),
+      timestamp: new Date(t.timestamp as unknown as string).getTime(),
       functionName: t.type.toLowerCase(),
-      chain: t.chain,
+      chain: t.chain as Chain,
     })),
     ethUsd,
     isLive: false,

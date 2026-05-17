@@ -74,10 +74,12 @@ async function loadWhales() {
       .sort((a, b) => b.netWorthUsd - a.netWorthUsd);
   } else {
     // Fallback to seeded DB
-    const dbWallets = await db.wallet.findMany({
-      orderBy: { netWorthUsd: "desc" },
-      take: 50,
-    });
+    const dbWallets = await db.wallet
+      .findMany({
+        orderBy: { netWorthUsd: "desc" },
+        take: 50,
+      })
+      .catch(() => []);
     wallets = dbWallets.map((w) => ({
       id: w.id,
       address: w.address,
@@ -95,10 +97,12 @@ async function loadWhales() {
   }
 
   // Build flow buckets from DB transactions (always works)
-  const txs = await db.transaction.findMany({
-    orderBy: { timestamp: "desc" },
-    take: 1000,
-  });
+  const txs = await db.transaction
+    .findMany({
+      orderBy: { timestamp: "desc" },
+      take: 1000,
+    })
+    .catch(() => []);
   const day = 24 * 60 * 60 * 1000;
   const now = Date.now();
   const buckets = Array.from({ length: 7 }).map((_, i) => {

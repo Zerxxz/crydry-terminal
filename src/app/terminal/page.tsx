@@ -15,7 +15,7 @@ import { MagentaAreaChart } from "@/components/chart/area-chart";
 import { Sparkline } from "@/components/chart/sparkline";
 import { formatPct, formatUsd, shortAddress, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { Chain } from "@prisma/client";
+import type { Chain, Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 30;
@@ -150,7 +150,11 @@ async function loadDashboard() {
     )
     .catch(() => [] as DashboardTx[]);
 
-  const sigs = await db.smartMoneySignal
+  type SignalWithWallet = Prisma.SmartMoneySignalGetPayload<{
+    include: { wallet: { select: { displayName: true; ens: true; address: true } } };
+  }>;
+
+  const sigs: SignalWithWallet[] = await db.smartMoneySignal
     .findMany({
       orderBy: { detectedAt: "desc" },
       take: 5,
@@ -158,7 +162,7 @@ async function loadDashboard() {
         wallet: { select: { displayName: true, ens: true, address: true } },
       },
     })
-    .catch(() => []);
+    .catch(() => [] as SignalWithWallet[]);
 
   return jsonSafe({
     tokens,

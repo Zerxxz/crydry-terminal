@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, Brain, Crown, Target, Zap } from "lucide-react";
+import type { Prisma, Wallet } from "@prisma/client";
 import { db } from "@/lib/db";
 import { jsonSafe } from "@/lib/serialize";
 import { formatPct, formatUsd, shortAddress, timeAgo } from "@/lib/format";
@@ -14,23 +15,33 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 export const dynamic = "force-dynamic";
 
-async function loadSmartMoney() {
-  const [wallets, signals] = await Promise.all([
-    db.wallet
-      .findMany({
+type SignalWithWallet = Prisma.SmartMoneySignalGetPayload<{
+  include: { wallet: { select: { address: true; displayName: true; ens: true } } };
+}>;
+
+async function loadSmartMoney(): Promise<{
+  wallets: Wallet[];
+  signals: SignalWithWallet[];
+}> {
+  try {
+    const [wallets, signals] = await Promise.all([
+      db.wallet.findMany({
         where: { labels: { has: "SMART_MONEY" } },
         orderBy: { pnl30dPct: "desc" },
-      })
-      .catch(() => []),
-    db.smartMoneySignal
-      .findMany({
+      }),
+      db.smartMoneySignal.findMany({
         orderBy: { detectedAt: "desc" },
         take: 60,
         include: { wallet: { select: { address: true, displayName: true, ens: true } } },
-      })
-      .catch(() => []),
-  ]);
-  return jsonSafe({ wallets, signals });
+      }),
+    ]);
+    return jsonSafe({ wallets, signals }) as {
+      wallets: Wallet[];
+      signals: SignalWithWallet[];
+    };
+  } catch {
+    return { wallets: [], signals: [] };
+  }
 }
 
 export default async function SmartMoneyPage() {
