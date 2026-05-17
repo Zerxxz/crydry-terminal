@@ -7,9 +7,17 @@ import { jsonSafe } from "@/lib/serialize";
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
 
-export async function GET(_: Request, { params }: { params: { address: string } }) {
+export async function GET(
+  _req: Request,
+  { params }: { params: { address: string } }
+) {
   try {
     const addr = decodeURIComponent(params.address);
+
+    if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+      return NextResponse.json({ error: "Invalid EVM address" }, { status: 400 });
+    }
+
     const meta = KNOWN_WHALES.find(
       (w) => w.address.toLowerCase() === addr.toLowerCase()
     );
@@ -34,8 +42,10 @@ export async function GET(_: Request, { params }: { params: { address: string } 
         valueUsd: (Number(tx.value) / 1e18) * ethUsd,
         timestamp: new Date(Number(tx.timeStamp) * 1000).toISOString(),
         blockNumber: tx.blockNumber,
-        type: tx.from.toLowerCase() === addr.toLowerCase() ? "TRANSFER_OUT" : "TRANSFER_IN",
-        gasUsd: ((Number(tx.gasUsed) * Number(tx.gasPrice)) / 1e18) * ethUsd,
+        type:
+          tx.from.toLowerCase() === addr.toLowerCase() ? "TRANSFER_OUT" : "TRANSFER_IN",
+        gasUsd:
+          ((Number(tx.gasUsed) * Number(tx.gasPrice)) / 1e18) * ethUsd,
         functionName: tx.functionName?.split("(")[0] || "transfer",
       }));
 
@@ -61,14 +71,16 @@ export async function GET(_: Request, { params }: { params: { address: string } 
     }
 
     // Fallback to DB
-    const wallet = await db.wallet.findFirst({
-      where: { OR: [{ address: addr.toLowerCase() }, { ens: addr }] },
-      include: {
-        holdings: { include: { token: true }, orderBy: { valueUsd: "desc" } },
-        transactions: { orderBy: { timestamp: "desc" }, take: 100 },
-        signals: { orderBy: { detectedAt: "desc" }, take: 20 },
-      },
-    });
+    const wallet = await db.wallet
+      .findFirst({
+        where: { OR: [{ address: addr.toLowerCase() }, { ens: addr }] },
+        include: {
+          holdings: { include: { token: true }, orderBy: { valueUsd: "desc" } },
+          transactions: { orderBy: { timestamp: "desc" }, take: 100 },
+          signals: { orderBy: { detectedAt: "desc" }, take: 20 },
+        },
+      })
+      .catch(() => null);
 
     if (!wallet) return NextResponse.json({ error: "Wallet not found" }, { status: 404 });
     return NextResponse.json({ source: "database", wallet: jsonSafe(wallet) });

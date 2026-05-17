@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Toaster } from "sonner";
@@ -21,10 +22,13 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Pass cookie header to wagmi for SSR hydration of wallet state
+  const cookie = headers().get("cookie") ?? "";
+
   return (
     <html lang="en" suppressHydrationWarning className={`${sans.variable} ${display.variable} ${mono.variable}`}>
       <body className="antialiased">
-        <Providers>{children}</Providers>
+        <Providers cookie={cookie}>{children}</Providers>
         <Toaster
           position="bottom-right"
           theme="dark"

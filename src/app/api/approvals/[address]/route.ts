@@ -5,11 +5,19 @@ import { jsonSafe } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_: Request, { params }: { params: { address: string } }) {
+export async function GET(
+  req: Request,
+  { params }: { params: { address: string } }
+) {
   try {
     const addr = decodeURIComponent(params.address);
-    const url = new URL(_.url);
+    const url = new URL(req.url);
     const chain = url.searchParams.get("chain") ?? "ETHEREUM";
+
+    // Validate EVM address format
+    if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+      return NextResponse.json({ error: "Invalid EVM address" }, { status: 400 });
+    }
 
     // Try real on-chain approval scanning
     const liveApprovals = await fetchOnChainApprovals(addr, chain);
@@ -20,17 +28,24 @@ export async function GET(_: Request, { params }: { params: { address: string } 
         updatedAt: new Date().toISOString(),
         wallet: { address: addr, chain },
         approvals: liveApprovals.sort((a, b) => {
-          const riskOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+          const riskOrder: Record<string, number> = {
+            CRITICAL: 0,
+            HIGH: 1,
+            MEDIUM: 2,
+            LOW: 3,
+          };
           return riskOrder[a.riskLevel] - riskOrder[b.riskLevel];
         }),
       });
     }
 
-    // Fallback to DB
-    const wallet = await db.wallet.findFirst({
-      where: { OR: [{ address: addr.toLowerCase() }, { ens: addr }] },
-      select: { id: true, address: true, chain: true, ens: true, displayName: true },
-    });
+    // No on-chain approvals found — try DB fallback
+    const wallet = await db.wallet
+      .findFirst({
+        where: { OR: [{ address: addr.toLowerCase() }, { ens: addr }] },
+        select: { id: true, address: true, chain: true, ens: true, displayName: true },
+      })
+      .catch(() => null);
 
     if (!wallet) {
       return NextResponse.json({
@@ -38,7 +53,8 @@ export async function GET(_: Request, { params }: { params: { address: string } 
         updatedAt: new Date().toISOString(),
         wallet: { address: addr, chain },
         approvals: [],
-        message: "No approvals found. This wallet may have no active ERC-20 allowances.",
+        message:
+          "No on-chain approvals detected. This wallet has no active ERC-20 allowances against the tracked spenders.",
       });
     }
 

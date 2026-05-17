@@ -14,11 +14,13 @@ import type { Chain, RiskLevel } from "@prisma/client";
 export const dynamic = "force-dynamic";
 
 async function loadRecentReports() {
-  const reports = await db.auditReport.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 12,
-    include: { findings: true },
-  });
+  const reports = await db.auditReport
+    .findMany({
+      orderBy: { createdAt: "desc" },
+      take: 12,
+      include: { findings: true },
+    })
+    .catch(() => [] as Awaited<ReturnType<typeof db.auditReport.findMany>>);
   return jsonSafe(reports);
 }
 

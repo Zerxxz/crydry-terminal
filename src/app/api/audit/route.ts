@@ -33,36 +33,43 @@ export async function POST(req: Request) {
     const compiler = src ? detectCompiler(src) : null;
 
     const verdict = runAudit(src);
-    const bytecodeSize = src.length; // proxy: size of supplied source
+    const bytecodeSize = src.length;
 
-    const report = await db.auditReport.create({
-      data: {
-        contractName,
-        chain,
-        address,
-        bytecodeSize,
-        verified: src.length > 0,
-        compiler,
-        riskScore: verdict.riskScore,
-        overallRisk: verdict.overallRisk,
-        summary: verdict.summary,
-        findings: { create: verdict.findings },
-      },
-      include: { findings: true },
-    });
+    // Try persisting to DB. If DB is unavailable, still return the verdict.
+    let reportId = "ephemeral-" + Date.now().toString(36);
+
+    const report = await db.auditReport
+      .create({
+        data: {
+          contractName,
+          chain,
+          address,
+          bytecodeSize,
+          verified: src.length > 0,
+          compiler,
+          riskScore: verdict.riskScore,
+          overallRisk: verdict.overallRisk,
+          summary: verdict.summary,
+          findings: { create: verdict.findings },
+        },
+        include: { findings: true },
+      })
+      .catch(() => null);
+
+    if (report) reportId = report.id;
 
     return NextResponse.json({
-      reportId: report.id,
-      contractName: report.contractName,
-      chain: report.chain,
-      address: report.address,
-      bytecodeSize: report.bytecodeSize,
-      verified: report.verified,
-      compiler: report.compiler,
-      riskScore: report.riskScore,
-      overallRisk: report.overallRisk,
-      summary: report.summary,
-      findings: jsonSafe(report.findings),
+      reportId,
+      contractName,
+      chain,
+      address,
+      bytecodeSize,
+      verified: src.length > 0,
+      compiler,
+      riskScore: verdict.riskScore,
+      overallRisk: verdict.overallRisk,
+      summary: verdict.summary,
+      findings: jsonSafe(report?.findings ?? verdict.findings),
     });
   } catch (e) {
     return NextResponse.json(

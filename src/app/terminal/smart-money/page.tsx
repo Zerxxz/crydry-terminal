@@ -16,15 +16,19 @@ export const dynamic = "force-dynamic";
 
 async function loadSmartMoney() {
   const [wallets, signals] = await Promise.all([
-    db.wallet.findMany({
-      where: { labels: { has: "SMART_MONEY" } },
-      orderBy: { pnl30dPct: "desc" },
-    }),
-    db.smartMoneySignal.findMany({
-      orderBy: { detectedAt: "desc" },
-      take: 60,
-      include: { wallet: { select: { address: true, displayName: true, ens: true } } },
-    }),
+    db.wallet
+      .findMany({
+        where: { labels: { has: "SMART_MONEY" } },
+        orderBy: { pnl30dPct: "desc" },
+      })
+      .catch(() => []),
+    db.smartMoneySignal
+      .findMany({
+        orderBy: { detectedAt: "desc" },
+        take: 60,
+        include: { wallet: { select: { address: true, displayName: true, ens: true } } },
+      })
+      .catch(() => []),
   ]);
   return jsonSafe({ wallets, signals });
 }

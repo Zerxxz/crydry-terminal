@@ -81,6 +81,7 @@ export function Topbar() {
                         type="button"
                       >
                         {chain.hasIcon && chain.iconUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img
                             alt={chain.name ?? "Chain"}
                             src={chain.iconUrl}
